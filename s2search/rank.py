@@ -4,6 +4,8 @@ import kenlm
 import numpy as np
 from s2search.text import fix_text, fix_author_text
 from s2search.features import make_features, posthoc_score_adjust
+import time
+from multiprocessing import Pool, cpu_count
 
 
 class S2Ranker:
@@ -16,14 +18,18 @@ class S2Ranker:
     def __init__(self, data_dir, use_posthoc_correction=True):
         self.use_posthoc_correction = use_posthoc_correction
         self.data_dir = data_dir
-        
+
+        '''
         lm_title_abstracts = kenlm.Model(os.path.join(data_dir, 'titles_abstracts_lm.binary'))
         lm_authors = kenlm.Model(os.path.join(data_dir, 'authors_lm.binary'))
         lm_venues = kenlm.Model(os.path.join(data_dir, 'venues_lm.binary'))
         self.lms = (lm_title_abstracts, lm_authors, lm_venues)
-
+        '''
+        
         with open(os.path.join(data_dir, 'lightgbm_model.pickle'), 'rb') as f:
             self.model = pickle.load(f)
+
+        self.pool = Pool(cpu_count())
     
     def score(self, query, papers):
         """Score each pair of (query, paper) for all papers
@@ -37,10 +43,22 @@ class S2Ranker:
             scores {np.array} -- an array of scores, one per paper in papers
         """
         query = str(query)
-        X = np.array([
-            make_features(query, self.prepare_result(paper), self.lms) 
-            for paper in papers
-        ])
+        #presults = [self.prepare_result(paper) for paper in papers]
+        presults = self.pool.map(self.prepare_result,papers)
+        args = [(query,pr) for pr in presults]
+
+        feats = self.pool.starmap(make_features, args)
+        X = np.array(feats)
+        
+        '''
+        feats = []
+        times = []
+        for pr in presults:
+            ss=time.time()
+            feats.append(make_features(query, pr))
+            times.append( int(round( (time.time()-ss)*1000)))
+        X = np.array(feats)
+        '''
         scores = self.model.predict(X)
         if self.use_posthoc_correction:
             scores = posthoc_score_adjust(scores, X, query)
