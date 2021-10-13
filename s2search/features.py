@@ -1,5 +1,5 @@
 import os
-data_dir = os.getenv('RERANKDIR','/data/branton/s2search/s2search')
+data_dir = os.getenv('RERANKDIR','/mnt/models/s2search')
 print('got RERANKDIR=',data_dir)
 import time
 import numpy as np
